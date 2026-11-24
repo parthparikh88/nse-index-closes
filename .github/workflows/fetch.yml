@@ -1,12 +1,17 @@
-name: Save NSE index closes
+name: Save NSE index closes and bhavcopy
 
 on:
   schedule:
-    - cron: '45 13 * * 1-5'
-    - cron: '45 15 * * 1-5'
-    - cron: '15 18 * * 1-5'
-    - cron: '15 2 * * 2-6'
-  workflow_dispatch: {}
+    - cron: '45 13 * * 1-5'     # 19:15 IST
+    - cron: '45 15 * * 1-5'     # 21:15 IST
+    - cron: '15 18 * * 1-5'     # 23:45 IST
+    - cron: '15 2 * * 2-6'      # 07:45 IST next morning (last catch-up before the reports run)
+  workflow_dispatch:
+    inputs:
+      lookback_days:
+        description: 'How many calendar days back to fetch (use 130 once to fill 3 months of history)'
+        required: false
+        default: '10'
 
 permissions:
   contents: write
@@ -18,21 +23,25 @@ concurrency:
 jobs:
   fetch:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Fetch NSE ind_close_all files
+      - name: Fetch NSE files
+        env:
+          LOOKBACK_DAYS: ${{ github.event.inputs.lookback_days || '10' }}
         run: python fetch.py
       - name: Commit new files
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add daily/ || true
+          git add daily/ bhav/ || true
           if git diff --cached --quiet; then
             echo "Nothing new."
           else
-            git commit -m "NSE index closes $(date -u +%Y-%m-%d)"
+            git commit -m "NSE files $(date -u +%Y-%m-%d)"
+            git pull --rebase --quiet || true
             git push
           fi
